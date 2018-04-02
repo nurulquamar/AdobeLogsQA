@@ -1,16 +1,15 @@
 #import statements
 import re
 import json
+from datetime import datetime
+date_format = '%d/%m/%Y'
 
 #initialize all values to blank
 sessionId = platform = fsearch_flightType = fsearch_origin = fsearch_destination = fsearch_depdate = \
-fsearch_arrdate = fsearch_adults = fsearch_child = fsearch_infants = fsearch_class = ""
-
-customValues = ['adobe.content.platform','adobe.content.sessionid','adobe.user.loginstatus','adobe.link.platform',
-'adobe.link.sessionid','adobe.fsearch.flightType','adobe.fsearch.origin','adobe.fsearch.destination','adobe.fsearch.depdate',
-'adobe.fsearch.arrdate','adobe.fsearch.adults','adobe.fsearch.child','adobe.fsearch.infants','adobe.fsearch.class']
-
+fsearch_arrdate = fsearch_adults = fsearch_child = fsearch_infants = fsearch_class = pmCode = qbCard = ""
 platform = "app android"
+inscheck = promosuccess = promofailure = "0"
+insnotcheck = "1"
 
 #parse the logs and check for values
 with open("AdobeLogs.txt") as f:
@@ -32,6 +31,32 @@ with open("AdobeLogs.txt") as f:
             fsearch_child = j["noOfChildren"]
             fsearch_adults = j["noOfAdults"]
             fsearch_class = j["travelClass"].lower()
+        elif("promoContext=REVIEW, " in line and "promoCode=" in line):
+            # print("LINE: "+line)
+            promo = line.split("promoCode=")[1].split(",")[0].lower()
+        elif("interactionType=ValidatePromocode" in line):
+            if("=200" in line):
+                promosuccess = "1"
+            else:
+                promofailure="1"
+        elif("onOptionalAddOnClicked :: Insurance is checked" in line):
+            print("Insurance is selected.")
+            inscheck = "1"
+            insnotcheck = "0"
+        elif("cybersourceFingerprintId" in line and "Post Method Request String is" in line):
+            pmCode = line.split("payop%3D")[1].split("%7")[0]
+            if("saveQBCard%3Dtrue" in line):
+                saveQBCard = "yes"
+            else:
+                saveQBCard = "no"
+
+    depDate = datetime.strptime(fsearch_depdate, date_format)
+    arrDate = datetime.strptime(fsearch_arrdate, date_format)
+    today = datetime.today()
+    daysToDep = depDate - today
+    daysToArr = arrDate - today
+    print("Dep Date: "+str(depDate)+"--->"+str(daysToDep))
+    print("Arr Date: "+str(arrDate)+"--->"+str(daysToArr))
 
 def ifNumber(expected):
     if(".0" in expected):
@@ -44,33 +69,37 @@ def ifNumber(expected):
         return expected
 
 def validateValues(key, expected, actual):
+    #Key:Value pairs which can  be cross-verified from the device logs
+    valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,'adobe.user.loginstatus':"logged-in",
+'adobe.link.platform':platform, 'adobe.link.sessionid':sessionId,
+'adobe.fsearch.flightType':fsearch_flightType,'adobe.fsearch.origin':fsearch_origin,
+'adobe.fsearch.destination':fsearch_destination,'adobe.fsearch.depdate':fsearch_depdate,
+'adobe.fsearch.arrdate':fsearch_arrdate,'adobe.fsearch.adults':fsearch_adults,'adobe.fsearch.child':fsearch_child,
+'adobe.fsearch.infants':fsearch_infants,'adobe.fsearch.class':fsearch_class,'adobe.review.depcity':fsearch_origin,
+'adobe.review.arrcity':fsearch_destination, 'adobe.review.days':str(daysToDep.days + 1)+"|"+str(daysToArr.days + 1),
+'adobe.review.adults': fsearch_adults, 'adobe.review.child':fsearch_child, 'adobe.review.infants':fsearch_infants,
+'adobe.review.dep.class':fsearch_class,'adobe.review.dep.date':fsearch_depdate,'adobe.review.ret.date':fsearch_arrdate,
+'adobe.review.flightType':fsearch_flightType, 'adobe.promo.promocode':promo, 'adobe.event.promosuccess':promosuccess,
+'adobe.event.promofailure':promofailure, 'adobe.event.inscheck':inscheck, 'adobe.event.insnotcheck':insnotcheck,
+'adobe.review.checkouttype':'logged-in', 'adobe.review.paymethod':pmCode+"|"+saveQBCard
+}
+    #Keys for which the values cannot be verified from Logs. Here we are assuming that the values are correct.
+    valuesNotInLogs = ['adobe.fsearch.dep.resultnumber','adobe.fsearch.ret.resultnumber','adobe.sort.filterterm','adobe.review.duration',
+    'adobe.review.dep.time', 'adobe.review.dep.id', 'adobe.review.dep.stops', 'adobe.review.dep.ref', 'adobe.review.dep.difference',
+    'adobe.review.dep.searchrank', 'adobe.review.dep.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id',
+    'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare',
+    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number']
     key = str(key)
     expected = str(expected)
     actual = str(actual)
     expected = ifNumber(expected)
-    if(key in customValues):
-        if("sessionid" in key):
-            expected = sessionId
-        elif("platform" in key):
-            expected = platform
-        elif("loginstatus" in key):
-            expected = "logged-in"
-        elif("flightType" in key):
-            expected = fsearch_flightType
-        elif("origin" in key):
-            expected = fsearch_origin
-        elif("destination" in key):
-            expected = fsearch_destination
-        elif("depdate" in key):
-            expected = fsearch_depdate
-        elif("arrdate" in key):
-            expected = fsearch_arrdate
-        elif("fsearch.adults" in key):
-            expected = fsearch_adults
-        elif("fsearch.fsearch_child" in key):
-            expected = fsearch_child
-        elif("fsearch.infants" in key):
-            expected = fsearch_infants
-        elif("fsearch.class" in key):
-            expected = fsearch_class
+    if(key in valuesFromLogs.keys()):
+        print ("Expected value for Key: "+key+" needs to be extracted from Device Logs")
+        expected = str(valuesFromLogs[key])
+        # print("Expected: "+expected)
+    elif(key in valuesNotInLogs):
+        print ("Expected value for Key: "+key+" cannot be extracted from Device Logs. Assuming the passed value to be correct.")
+        return (expected, actual, True)
     return (expected, actual, str(expected)==str(actual))
+
+

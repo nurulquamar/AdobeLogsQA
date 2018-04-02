@@ -143,7 +143,8 @@ def writeToSheet(page,dic):
                     else:
                         worksheet.write(i, COLUMN+3, "FAIL", format_fail)
                         BLANK+=1
-            print("*"*50)
+                        print("Key: "+key+" not found in current event in device logs.")
+            print("*"*80)
             break
     COLUMN+= 5
 
@@ -174,6 +175,8 @@ with open("AdobeLogs.txt") as f:
                 print("Tracking type is: Action Tracking")
 
             print("Page Name: "+pageName)
+            print("Dictionary: ")
+            print(tmp)
             writeToSheet(pageName,tmp)
 
 writeSummary()
