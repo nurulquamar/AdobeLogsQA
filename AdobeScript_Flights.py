@@ -36,6 +36,8 @@ ROW_PAGE_NAME = 2
 ROW_CLICK_NAME = 8
 event_not_resolved = []
 table_not_logged = []
+values.getLoginstatus()
+values.printInfo()
 
 #Set Formatting in the sheet
 format_fail = wb_output.add_format({'bold': True, 'font_color': 'red','border':1})
@@ -161,8 +163,8 @@ def writeToSheet(page,dic):
                         if key in str(dic):
                             TOTAL+= 1
                             #Validate the expected and actual values
-                            EXP, ACT, PASS = values.validateValues(key,expectedValue,dic[key])
-                            print(str(key)+"\t::\t"+str(EXP)+"\t::\t"+str(ACT))
+                            EXP, ACT, PASS = values.validateValues(key,expectedValue,dic[key],worksheetName)
+                            # print(str(key)+"\t::\t"+str(EXP)+"\t::\t"+str(ACT))
                             worksheet.write(i, COLUMN+1, EXP, format_border)
                             worksheet.write(i, COLUMN+2, ACT, format_border)
                             if(PASS):
@@ -195,10 +197,10 @@ def writeToSheet(page,dic):
 
 tmp = {}
 getAllTableNames()
-with open("AdobeLogs.txt", encoding='utf8', errors='ignore') as f:
+with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
     for line in f:
         if "Start --" in line:
-            print("Starting collecting the values...")
+            # print("Starting collecting the values...")
             tmp.clear()
         if (("key : value" in line) and ("adobe") in line):
             #Read key and value from log
@@ -209,7 +211,7 @@ with open("AdobeLogs.txt", encoding='utf8', errors='ignore') as f:
             tmp[key] = value;
             # print(key+"\t:\t"+value)
         if "-- End" in line:
-            print("Ending collecting the values...")
+            # print("Ending collecting the values...")
             # print("Buffer is: ")
 
             #Get the pagename, for track state 
