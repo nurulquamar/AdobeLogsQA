@@ -12,15 +12,63 @@ inscheck = promosuccess = promofailure = "0"
 insnotcheck = "1"
 isRoundTrip = False
 isInt = False
-loginAtStart = False
-isGuestUser = False
-
+login_state_before_PaxPage = "guest"
+login_state_from_PaxPage = "guest"
 
 #Keys which are not applicable in case of OW
 valuesNotApplicable = ['adobe.fsearch.arrdate', 'adobe.fsearch.ret.resultnumber', 'adobe.review.ret.class', 'adobe.review.ret.time',
 'adobe.review.ret.id', 'adobe.review.ret.date', 'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank',
 'adobe.review.ret.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id', 'adobe.review.ret.date', 'adobe.review.ret.stops', 'adobe.review.ret.ref',
 'adobe.review.ret.diffrence', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare', 'adobe.review.ret.id']
+
+def getLoginstatus():
+    global login_state_before_PaxPage, login_state_from_PaxPage
+    global fileContents
+    with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
+        fileContents = f.read()
+    # print(" # "*100)
+    # Check if user was logged in before the flight pax page
+    getPromoLogs = re.findall('email=(.*?)&(promoSource)', fileContents, re.S)
+    # print("get promo logs: ")
+    # print(getPromoLogs)
+    if("email=&" in str(getPromoLogs)):
+        print("User wasn't logged in initially")
+    else:
+        # print("------------------------------- User was logged in while search call")
+        login_state_before_PaxPage = "logged-in"
+    # Check if user was logged in after review page
+    saveReviewLogs = getPromoLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
+    # print("Save review logs: ")
+    # print(saveReviewLogs)
+    if ("guest" not in str(saveReviewLogs)):
+        login_state_from_PaxPage = "logged-in"
+
+def printInfo():
+    maxSize = 40
+    print('+' + '-'*48 + '+')
+    if(isInt):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tSector : International"))
+        # print()
+    else:
+        print('| %-*.*s |' % (maxSize, maxSize, "\tSector : Domestic"))
+    if(isRoundTrip):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tType : RoundTrip"))
+    else:
+        print('| %-*.*s |' % (maxSize, maxSize, "\tType : OneWay"))
+    print('| %-*.*s |' % (maxSize, maxSize, "\tOrigin : "+fsearch_origin.upper()))
+    print('| %-*.*s |' % (maxSize, maxSize, "\tDestination : "+fsearch_destination.upper()))
+    print('| %-*.*s |' % (maxSize, maxSize, "\tDepart Date : "+fsearch_depdate))
+    if(isRoundTrip):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tArrival Date : "+fsearch_arrdate))
+    print('| %-*.*s |' % (maxSize, maxSize, "\t"+str(fsearch_adults)+" Adults || "+str(fsearch_child)+" Children || "+str(fsearch_infants)+" Infants"))
+    if(login_state_before_PaxPage == True):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tUser was already logged-in throughout the flow "))
+    elif(login_state_from_PaxPage == True):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tUser continues as Guest "))
+    else:
+        print('| %-*.*s |' % (maxSize, maxSize, "\tUser was logged-in during the flow."))
+    print('+' + '-'*48+ '+')
+    print("\n\n")
 
 #Parse the logs and check for values
 with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
@@ -39,7 +87,7 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
             fsearch_depdate = j['tripList'][0]['departureDate']
             if(len(j['tripList']))>1:
                 isRoundTrip = True
-                print("This is a Round Trip Flow...................")
+                # print("This is a Round Trip Flow...................")
                 fsearch_arrdate = j['tripList'][1]['departureDate']
             fsearch_infants = j["noOfInfants"]
             fsearch_child = j["noOfChildren"]
@@ -56,7 +104,7 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
             else:
                 promofailure="1"
         elif("onOptionalAddOnClicked :: Insurance is checked" in line):
-            print("Insurance is selected.")
+            # print("Insurance is selected.")
             inscheck = "1"
             insnotcheck = "0"
         elif("cybersourceFingerprintId" in line and "Post Method Request String is" in line):
@@ -65,13 +113,6 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
                 saveQBCard = "yes"
             else:
                 saveQBCard = "no"
-        # elif("&purchaseAmount=" in line and "email=&" in line):
-        #     print("**************** User wasn't logged in while searching flights....")
-        # elif("&purchaseAmount=" in line and "email=" in line):
-        #     print("**************** User was logged in while searching flights....")
-        # if("userId%22%3A%22guest" in line):
-        #     print("**************** User continued as guest..........")
-
 
     depDate = datetime.strptime(fsearch_depdate, date_format)
     if isRoundTrip:
@@ -99,9 +140,10 @@ def reviewDays():
     else:
         return str(daysToDep.days + 1)
 
-def validateValues(key, expected, actual):
+def validateValues(key, expected, actual, sheetName):
+    global login_state_from_PaxPage, login_state_before_PaxPage
     #Key:Value pairs which can  be cross-verified from the device logs
-    valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,'adobe.user.loginstatus':"logged-in",
+    valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,
 'adobe.link.platform':platform, 'adobe.link.sessionid':sessionId,
 'adobe.fsearch.flightType':fsearch_flightType,'adobe.fsearch.origin':fsearch_origin,
 'adobe.fsearch.destination':fsearch_destination,'adobe.fsearch.depdate':fsearch_depdate,
@@ -135,4 +177,19 @@ def validateValues(key, expected, actual):
         expected = expected.replace("dom","int")
     elif(("domestic" in expected) and (isInt==True)):
         expected = expected.replace("domestic","international")
+    #Check the login cases
+    if(key == "adobe.user.loginstatus"):
+        #If the user went till bank page as guest, then pass the value as guest for all pages.
+        if(login_state_from_PaxPage == "guest"):
+            expected = "guest"
+        #If the user was logged in while making the search, then pass the value as logged-in for all pages.
+        elif(login_state_before_PaxPage == "logged-in"):
+            expected = "logged-in"
+        #If the used logged-in or registered during the flow then pass the value accordingly on all pages.
+        elif(login_state_before_PaxPage=="guest" and login_state_from_PaxPage=="logged-in"):
+            print("Sheet name: "+sheetName)
+            if(sheetName in ["FlightHome","FlightSRP","FlightReviewPage"]):
+                expected = "guest"
+            else:
+                expected = "logged-in"
     return (expected, actual, str(expected)==str(actual))
