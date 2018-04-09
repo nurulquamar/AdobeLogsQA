@@ -8,12 +8,11 @@ date_format = '%d/%m/%Y'
 sessionId = platform = fsearch_flightType = fsearch_origin = fsearch_destination = fsearch_depdate = \
 fsearch_arrdate = fsearch_adults = fsearch_child = fsearch_infants = fsearch_class = pmCode = qbCard = promo = ""
 platform = "app android"
-inscheck = promosuccess = promofailure = "0"
+inscheck = promofailure = promosuccess = "0" 
 insnotcheck = "1"
-isRoundTrip = False
-isInt = False
-login_state_before_PaxPage = "guest"
-login_state_from_PaxPage = "guest"
+isRoundTrip = isInt = isPriceChanged = False
+flightsFound = True
+login_state_before_PaxPage = login_state_from_PaxPage = "logged-in"
 
 #Keys which are not applicable in case of OW
 valuesNotApplicable = ['adobe.fsearch.arrdate', 'adobe.fsearch.ret.resultnumber', 'adobe.review.ret.class', 'adobe.review.ret.time',
@@ -21,27 +20,86 @@ valuesNotApplicable = ['adobe.fsearch.arrdate', 'adobe.fsearch.ret.resultnumber'
 'adobe.review.ret.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id', 'adobe.review.ret.date', 'adobe.review.ret.stops', 'adobe.review.ret.ref',
 'adobe.review.ret.diffrence', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare', 'adobe.review.ret.id']
 
-def getLoginstatus():
-    global login_state_before_PaxPage, login_state_from_PaxPage
+NA_Tables = ["FlightSRP-->SRP Track Action (roundtrip case - No Search Result Found)","FlightReviewPage-->Track Action (in case of promosuccess)", "FlightReviewPage-->Track Action (in case of promofailure)",
+"FlightReviewPage-->Track Action (in case of fare change shown)", "FlightReviewPage-->Track Action (in case of continue click on fare change)",
+"FlightReviewPage-->Track Action (in case of select another flight on fare change)", "FlightReviewPage-->Track State (On click of GST)",
+"FlightLoginPage-->Track State (Login page)", "FlightLoginPage-->Track Action (in case of guest booking or guest checkout)", 
+"InternationalFlightCase-->Track State (On SRP page when click on more flights)"]
+
+def getStatus():
+    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged
     global fileContents
     with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
         fileContents = f.read()
-    # print(" # "*100)
+
     # Check if user was logged in before the flight pax page
-    getPromoLogs = re.findall('email=(.*?)&(promoSource)', fileContents, re.S)
-    # print("get promo logs: ")
-    # print(getPromoLogs)
-    if("email=&" in str(getPromoLogs)):
-        print("User wasn't logged in initially")
+    getPromoLogs = re.findall('Parameters::: {(.*?)email=,(.*?)}', fileContents)
+    if(len(getPromoLogs)>=1):
+        login_state_before_PaxPage = "guest"
     else:
-        # print("------------------------------- User was logged in while search call")
         login_state_before_PaxPage = "logged-in"
+
     # Check if user was logged in after review page
-    saveReviewLogs = getPromoLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
-    # print("Save review logs: ")
-    # print(saveReviewLogs)
-    if ("guest" not in str(saveReviewLogs)):
+    saveReviewLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
+    if ("guest" in str(saveReviewLogs)):
+        login_state_before_PaxPage = login_state_from_PaxPage = "guest"
+    else:
         login_state_from_PaxPage = "logged-in"
+
+    #Check if flight results were fetched
+    depFlightCount = re.findall('(?<=dep.resultnumber:)(?s)(\d+)',fileContents)
+    print(" Departure Flight Count : "+str(depFlightCount))
+    if(depFlightCount=="0"):
+        flightsFound = False
+    if(isRoundTrip):
+        retFlightCount = re.findall('(?<=ret.resultnumber:)(?s)(\d+)',fileContents)
+        print(" Return Flight Count : "+str(retFlightCount))
+        if(retFlightCount == "0"):
+            flightsFound = False
+
+    #Check for promo validation
+    promoVal = re.findall('ResponseContainer(.+)ValidatePromocode(.+)]',fileContents)
+    if("Invalid promocode" in str(promoVal)):
+        promofailure = "1"
+    if("resCode=200" in str(promoVal)):
+        promosuccess = "1"
+
+    #Check for price Changed
+    priceChanged = re.findall('responseString(.+)\"priceChanged\":true',fileContents)
+    if(len(priceChanged)>0):
+        isPriceChanged = True
+
+
+def isTableNA():
+    global NA_Tables
+    #Remove those tables from NA_Tables which are applicable
+    print(" ------------------- Executed --------------- ")
+
+    #If flight results are found, the "No results found" table is NA
+    if not(flightsFound):
+        NA_Tables.remove("FlightSRP-->SRP Track Action (roundtrip case - No Search Result Found)")
+
+    #If promo validation did not fail
+    if not(promofailure=="0"):
+        NA_Tables.remove("FlightReviewPage-->Track Action (in case of promofailure)")
+
+    #If promo validation did not succeed
+    if not(promosuccess=="0"):
+        NA_Tables.remove("FlightReviewPage-->Track Action (in case of promosuccess)")
+
+    #if Dom flow
+    if (isInt==True):
+        NA_Tables.remove("InternationalFlightCase-->Track State (On SRP page when click on more flights)")
+
+    #If price was changed
+    if(isPriceChanged == True):
+        NA_Tables.remove("FlightReviewPage-->Track Action (in case of fare change shown)")
+        NA_Tables.remove("FlightReviewPage-->Track Action (in case of continue click on fare change)")
+        NA_Tables.remove("FlightReviewPage-->Track Action (in case of select another flight on fare change)")
+
+    if(login_state_from_PaxPage=="guest"):
+        NA_Tables.remove("FlightLoginPage-->Track Action (in case of guest booking or guest checkout)")
+
 
 def printInfo():
     maxSize = 40
@@ -61,10 +119,10 @@ def printInfo():
     if(isRoundTrip):
         print('| %-*.*s |' % (maxSize, maxSize, "\tArrival Date : "+fsearch_arrdate))
     print('| %-*.*s |' % (maxSize, maxSize, "\t"+str(fsearch_adults)+" Adults || "+str(fsearch_child)+" Children || "+str(fsearch_infants)+" Infants"))
-    if(login_state_before_PaxPage == True):
+    if(login_state_before_PaxPage == "logged-in"):
         print('| %-*.*s |' % (maxSize, maxSize, "\tUser was already logged-in throughout the flow "))
-    elif(login_state_from_PaxPage == True):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tUser continues as Guest "))
+    elif(login_state_from_PaxPage == "guest"):
+        print('| %-*.*s |' % (maxSize, maxSize, "\tUser continued as Guest "))
     else:
         print('| %-*.*s |' % (maxSize, maxSize, "\tUser was logged-in during the flow."))
     print('+' + '-'*48+ '+')
@@ -98,11 +156,6 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
         elif("promoContext=REVIEW, " in line and "promoCode=" in line):
             # print("LINE: "+line)
             promo = line.split("promoCode=")[1].split(",")[0].lower()
-        elif("interactionType=ValidatePromocode" in line):
-            if("=200" in line):
-                promosuccess = "1"
-            else:
-                promofailure="1"
         elif("onOptionalAddOnClicked :: Insurance is checked" in line):
             # print("Insurance is selected.")
             inscheck = "1"
@@ -161,24 +214,24 @@ def validateValues(key, expected, actual, sheetName):
     'adobe.review.dep.time', 'adobe.review.dep.id', 'adobe.review.dep.stops', 'adobe.review.dep.ref', 'adobe.review.dep.difference',
     'adobe.review.dep.searchrank', 'adobe.review.dep.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id',
     'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare',
-    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number']
+    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number','adobe.sort.sorttype']
 
     key = str(key)
     expected = str(expected)
     actual = str(actual)
     expected = ifNumber(expected)
     if(key in valuesFromLogs.keys()):
-        print ("Expected value for Key: "+key+" needs to be extracted from Device Logs")
+        # print ("Expected value for Key: "+key+" needs to be extracted from Device Logs")
         expected = str(valuesFromLogs[key])
     elif(key in valuesNotInLogs):
-        print ("Expected value for Key: "+key+" cannot be extracted from Device Logs. Assuming the passed value to be correct.")
+        # print ("Expected value for Key: "+key+" cannot be extracted from Device Logs. Assuming the passed value to be correct.")
         return (expected, actual, True)
     elif(("pagename" in key) and (isInt==True)):
         expected = expected.replace("dom","int")
     elif(("domestic" in expected) and (isInt==True)):
         expected = expected.replace("domestic","international")
     #Check the login cases
-    if(key == "adobe.user.loginstatus"):
+    if(key == "adobe.user.loginstatus" or key == "adobe.review.checkouttype"):
         #If the user went till bank page as guest, then pass the value as guest for all pages.
         if(login_state_from_PaxPage == "guest"):
             expected = "guest"
@@ -187,7 +240,7 @@ def validateValues(key, expected, actual, sheetName):
             expected = "logged-in"
         #If the used logged-in or registered during the flow then pass the value accordingly on all pages.
         elif(login_state_before_PaxPage=="guest" and login_state_from_PaxPage=="logged-in"):
-            print("Sheet name: "+sheetName)
+            # print("Sheet name: "+sheetName)
             if(sheetName in ["FlightHome","FlightSRP","FlightReviewPage"]):
                 expected = "guest"
             else:
