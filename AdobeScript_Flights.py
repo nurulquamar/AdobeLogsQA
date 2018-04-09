@@ -26,17 +26,20 @@ sheetNameMap = {"yt:flight:home":"FlightHome",
                 "yt:flight:int:checkout:payment:wallets":"FlightPaymentPage"
                 }
 
+#Read input from the master sheet
 wb_input = open_workbook('Flights.xlsx')
+#Write output to the final sheet
 wb_output = xlsxwriter.Workbook('Results_Flights.xlsx')
 sheet_names = wb_input.sheets()
 names = {}
-COLUMN = 0
-PASSED = FAILED = TOTAL = BLANK = 0
+COLUMN = PASSED = FAILED = TOTAL = BLANK = 0
 ROW_PAGE_NAME = 2
 ROW_CLICK_NAME = 8
 event_not_resolved = []
 table_not_logged = []
-values.getLoginstatus()
+#Call the getStatus method to get the basic values
+values.getStatus()
+#Print the basic info about the scenario
 values.printInfo()
 
 #Set Formatting in the sheet
@@ -49,17 +52,23 @@ format_heading2 = wb_output.add_format({'bold': True,'bg_color':'#8DE1F0','borde
 format_border = wb_output.add_format({'border':1})
 format_bold_border = wb_output.add_format({'border':1, 'bold':True})
 
+#Read all the table names from the Input sheet in format Sheet name --> Table name
 def getAllTableNames():
     for s in range(0,len(sheet_names)):
         currentSheet = wb_input.sheet_by_index(s)
         for c in range(0,currentSheet.ncols):
             if("Track" in currentSheet.cell(0,c).value):
                 table_not_logged.append(sheet_names[s].name+"-->"+str(currentSheet.cell(0,c).value))
+    # print(" =============== All table names: ")
+    # print(table_not_logged)
 
 #Write the summary of total events in a new sheet named Summary
 def writeSummary():
-    print("Writing values in Summary Sheet...")
     global PASSED, FAILED, TOTAL, BLANK
+    print("Writing values in Summary Sheet...")
+    values.isTableNA()
+    print("NA Table: *************** ")
+    print(values.NA_Tables)
     worksheet = wb_output.add_worksheet("Summary")
     # worksheet.set_column(1, 0, 25)
     worksheet.merge_range(0, 0, 0, 1, "Summary", format_heading1)
@@ -75,15 +84,25 @@ def writeSummary():
     worksheet.write(4, 0, "Blank Events Passed", format_heading2)
     worksheet.set_column(4, 0, 25)
     worksheet.write(4, 1, BLANK, format_bold_border)
-    worksheet.write(6, 0, "Following logs didn't match the tables:",format_heading1)
+
+    #Print the events captured in Logs, which couldn't be mapped to tables in Input sheet
+    worksheet.write(6, 0, "Following logs didn't match the tables",format_heading1)
+    worksheet.write(6, 1, "Reasons",format_heading1)
     worksheet.set_column(6, 0, 40)
     for i in range(0,len(event_not_resolved)):
         worksheet.write(7+i, 0, event_not_resolved[i],format_fail)
-    worksheet.write(9+i, 0, "Following tables didn't match the logs:",format_heading1)
+
+    #Print the table names from input sheet, for which no events were captured in Logs.
+    worksheet.write(9+i, 0, "Following tables didn't match the logs",format_heading1)
+    worksheet.write(9+i, 1, "Reasons",format_heading1)
     for j in range(0,len(table_not_logged)):
         worksheet.write(10+i+j, 0, table_not_logged[j],format_fail)
+        #If the table is not applicable for the current scenario, then mention it.
+        if(table_not_logged[j] in values.NA_Tables):
+            print(" ***** Inside: "+table_not_logged[j])
+            worksheet.write(10+i+j, 1, "Not applicable",format_NA)
 
-    #create pie chart
+    #create a pie chart
     chart = wb_output.add_chart({'type': 'pie'})
     chart.add_series({
         'categories': '=Summary!$A$3:$A$5',
@@ -126,9 +145,10 @@ def writeToSheet(page,dic):
                 ValueCol = ValueCol.replace("dom","int")
             # print("Unique Key:Val--> "+uniqueKey+" : "+uniqueValue+"\tActual Key:Val-->"+keyCol+" : "+ValueCol)
             if((uniqueKey == keyCol.strip()) and (uniqueValue == ValueCol.strip())):
-                print("Page Name Found at "+str(uniqueRow)+", "+str(col))
+                # print("Page Name Found at "+str(uniqueRow)+", "+str(col))
                 tableHeading = inputSheet.cell(0,col).value
                 print("Table Heading: "+tableHeading)
+
                 #Create a sheet with same name as Input Sheet
                 worksheetName = sheetNameMap[page.replace("_",":")]
                 if wb_output.get_worksheet_by_name(worksheetName) == None:
@@ -138,9 +158,6 @@ def writeToSheet(page,dic):
                 else:
                     print("Worksheet named: "+worksheetName+" already exists. Using the existing one.")
                     worksheet = wb_output.get_worksheet_by_name(worksheetName)
-
-                if(worksheetName+"-->"+tableHeading in table_not_logged):
-                    table_not_logged.remove(worksheetName+"-->"+tableHeading)
 
                 #Write column headings
                 print("Writing column headings in the sheet")
@@ -155,16 +172,18 @@ def writeToSheet(page,dic):
                     key = inputSheet.cell(i,col).value
                     #Check to avoid BLANK values
                     if(key!=""):
+                        if(worksheetName+"-->"+tableHeading in table_not_logged):
+                            table_not_logged.remove(worksheetName+"-->"+tableHeading)
                         #Write the key
                         expectedValue = inputSheet.cell(i,col+1).value
                         worksheet.write(i, COLUMN+0, key, format_border)
                         worksheet.set_column(i, COLUMN+0, 20)
-                        #Check if the key exists in our Dictionary
+                        #Check if the key exists in our Dictionary from Logs
                         if key in str(dic):
                             TOTAL+= 1
                             #Validate the expected and actual values
                             EXP, ACT, PASS = values.validateValues(key,expectedValue,dic[key],worksheetName)
-                            # print(str(key)+"\t::\t"+str(EXP)+"\t::\t"+str(ACT))
+                            print(str(key)+"\t::\t"+str(EXP)+"\t::\t"+str(ACT))
                             worksheet.write(i, COLUMN+1, EXP, format_border)
                             worksheet.write(i, COLUMN+2, ACT, format_border)
                             if(PASS):
@@ -195,6 +214,7 @@ def writeToSheet(page,dic):
         print(page+" cannot be resolved!")
         event_not_resolved.append(page)
 
+# Start of script
 tmp = {}
 getAllTableNames()
 with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
