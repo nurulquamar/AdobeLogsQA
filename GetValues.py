@@ -8,11 +8,11 @@ date_format = '%d/%m/%Y'
 sessionId = platform = fsearch_flightType = fsearch_origin = fsearch_destination = fsearch_depdate = \
 fsearch_arrdate = fsearch_adults = fsearch_child = fsearch_infants = fsearch_class = pmCode = qbCard = promo = ""
 platform = "app android"
-inscheck = promofailure = promosuccess = "0" 
-insnotcheck = "1"
+promofailure = promosuccess = inscheck = insnotcheck = "0"
 isRoundTrip = isInt = isPriceChanged = False
 flightsFound = True
 login_state_before_PaxPage = login_state_from_PaxPage = "logged-in"
+all_promos = []
 
 #Keys which are not applicable in case of OW
 valuesNotApplicable = ['adobe.fsearch.arrdate', 'adobe.fsearch.ret.resultnumber', 'adobe.review.ret.class', 'adobe.review.ret.time',
@@ -26,11 +26,67 @@ NA_Tables = ["FlightSRP-->SRP Track Action (roundtrip case - No Search Result Fo
 "FlightLoginPage-->Track State (Login page)", "FlightLoginPage-->Track Action (in case of guest booking or guest checkout)", 
 "InternationalFlightCase-->Track State (On SRP page when click on more flights)"]
 
-def getStatus():
-    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged
-    global fileContents
+def getStatusFromAndroid():
+    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged, fileContents,fsearch_depdate, fsearch_arrdate, fsearch_origin, fsearch_destination, fsearch_infants, fsearch_child, fsearch_adults, fsearch_class,sessionId, fsearch_flightType, isRoundTrip, isInt, promo, inscheck, insnotcheck, saveQBCard, daysToDep, daysToArr, all_promos, pmCode
     with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
         fileContents = f.read()
+
+    promoMatches = re.findall('Request Parameters(.+)promoContext(.+)\n',fileContents)
+    for current in promoMatches:
+        if("promoCode=" in str(current)):
+            p = str(current).split("promoCode=")[1].split(",")[0]
+            if not(p in all_promos):
+                all_promos.append(p)
+    print("All promo codes applied: ")
+    print(all_promos)
+
+    #Check the Search Params
+    searchReq = re.findall('Nimble search Criteria (.+)\n',fileContents)
+    req_params =  searchReq[0]
+    #convert it to JSON
+    j = json.loads(req_params)
+    #get Values from JSON
+    sessionId = j['sessionId']
+    fsearch_flightType = j["tripType"].lower()
+    fsearch_origin = j['tripList'][0]["origin"].lower()
+    fsearch_destination = j['tripList'][0]["destination"].lower()
+    fsearch_depdate = j['tripList'][0]['departureDate']
+    if(len(j['tripList']))>1:
+        isRoundTrip = True
+        # print("This is a Round Trip Flow...................")
+        fsearch_arrdate = j['tripList'][1]['departureDate']
+    fsearch_infants = j["noOfInfants"]
+    fsearch_child = j["noOfChildren"]
+    fsearch_adults = j["noOfAdults"]
+    fsearch_class = j["travelClass"].lower()
+    if(j["domain"]=="INT"):
+        isInt = True
+
+    #Check the payment mode
+    payMode = re.findall('Request Parameters(.+)paymentOptionParameters=(.+),',fileContents)
+    print("Pay mode: ")
+    print(payMode)
+    pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
+
+    quickBook = re.findall('saveQBCard%3Dtrue(.+)',fileContents)
+    if len(quickBook)>0:
+        saveQBCard = "yes"
+    else:
+        saveQBCard = "no"
+
+    insurance = re.findall('onOptionalAddOnClicked(.+)Insurance is checked',fileContents)
+    if len(insurance)>0:
+        inscheck = "1"
+    else:
+        insnotcheck = "1"
+
+    depDate = datetime.strptime(fsearch_depdate, date_format)
+    if isRoundTrip:
+        arrDate = datetime.strptime(fsearch_arrdate, date_format)
+    today = datetime.today()
+    daysToDep = depDate - today
+    if isRoundTrip:
+        daysToArr = arrDate - today
 
     # Check if user was logged in before the flight pax page
     getPromoLogs = re.findall('Parameters::: {(.*?)email=,(.*?)}', fileContents)
@@ -73,7 +129,6 @@ def getStatus():
 def isTableNA():
     global NA_Tables
     #Remove those tables from NA_Tables which are applicable
-    print(" ------------------- Executed --------------- ")
 
     #If flight results are found, the "No results found" table is NA
     if not(flightsFound):
@@ -128,55 +183,6 @@ def printInfo():
     print('+' + '-'*48+ '+')
     print("\n\n")
 
-#Parse the logs and check for values
-with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
-    for line in f:
-        #get origin, destination, trip type, depart date, arrival date, class, number of Adults, Infants and Children from Request
-        if("Nimble search Criteria" in line):
-            #split the request params
-            req_params =  line.split("Criteria ")[1]
-            #convert it to JSON
-            j = json.loads(req_params)
-            #get Values from JSON
-            sessionId = j['sessionId']
-            fsearch_flightType = j["tripType"].lower()
-            fsearch_origin = j['tripList'][0]["origin"].lower()
-            fsearch_destination = j['tripList'][0]["destination"].lower()
-            fsearch_depdate = j['tripList'][0]['departureDate']
-            if(len(j['tripList']))>1:
-                isRoundTrip = True
-                # print("This is a Round Trip Flow...................")
-                fsearch_arrdate = j['tripList'][1]['departureDate']
-            fsearch_infants = j["noOfInfants"]
-            fsearch_child = j["noOfChildren"]
-            fsearch_adults = j["noOfAdults"]
-            fsearch_class = j["travelClass"].lower()
-            if(j["domain"]=="INT"):
-                isInt = True
-        elif("promoContext=REVIEW, " in line and "promoCode=" in line):
-            # print("LINE: "+line)
-            promo = line.split("promoCode=")[1].split(",")[0].lower()
-        elif("onOptionalAddOnClicked :: Insurance is checked" in line):
-            # print("Insurance is selected.")
-            inscheck = "1"
-            insnotcheck = "0"
-        elif("cybersourceFingerprintId" in line and "Post Method Request String is" in line):
-            pmCode = line.split("payop%3D")[1].split("%7")[0]
-            if("saveQBCard%3Dtrue" in line):
-                saveQBCard = "yes"
-            else:
-                saveQBCard = "no"
-
-    depDate = datetime.strptime(fsearch_depdate, date_format)
-    if isRoundTrip:
-        arrDate = datetime.strptime(fsearch_arrdate, date_format)
-    today = datetime.today()
-    daysToDep = depDate - today
-    if isRoundTrip:
-        daysToArr = arrDate - today
-    # print("Dep Date: "+str(depDate)+"--->"+str(daysToDep))
-    # print("Arr Date: "+str(arrDate)+"--->"+str(daysToArr))
-
 def ifNumber(expected):
     if(".0" in expected):
         try:
@@ -205,7 +211,7 @@ def validateValues(key, expected, actual, sheetName):
 'adobe.review.arrcity':fsearch_destination, 'adobe.review.days':reviewDays(),
 'adobe.review.adults': fsearch_adults, 'adobe.review.child':fsearch_child, 'adobe.review.infants':fsearch_infants,
 'adobe.review.dep.class':fsearch_class,'adobe.review.dep.date':fsearch_depdate,'adobe.review.ret.date':fsearch_arrdate,
-'adobe.review.flightType':fsearch_flightType, 'adobe.promo.promocode':promo, 'adobe.event.promosuccess':promosuccess,
+'adobe.review.flightType':fsearch_flightType, 'adobe.event.promosuccess':promosuccess,
 'adobe.event.promofailure':promofailure, 'adobe.event.inscheck':inscheck, 'adobe.event.insnotcheck':insnotcheck,
 'adobe.review.checkouttype':'logged-in', 'adobe.review.paymethod':pmCode+"|"+saveQBCard
 }
@@ -230,8 +236,13 @@ def validateValues(key, expected, actual, sheetName):
         expected = expected.replace("dom","int")
     elif(("domestic" in expected) and (isInt==True)):
         expected = expected.replace("domestic","international")
+
+    #Check the promoCode Case
+    if(key == "adobe.promo.promocode"):
+        return(str(all_promos), actual, actual.upper() in all_promos)
+
     #Check the login cases
-    if(key == "adobe.user.loginstatus" or key == "adobe.review.checkouttype"):
+    elif(key == "adobe.user.loginstatus" or key == "adobe.review.checkouttype"):
         #If the user went till bank page as guest, then pass the value as guest for all pages.
         if(login_state_from_PaxPage == "guest"):
             expected = "guest"
