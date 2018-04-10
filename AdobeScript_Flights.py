@@ -18,6 +18,7 @@ sheetNameMap = {"yt:flight:home":"FlightHome",
                 "yt:flight:dom:checkout:payment:wallets":"FlightPaymentPage",
                 "yt:flight:int:srp":"FlightSRP",
                 "yt:flight:int:srp:filter":"FlightSRP",
+                "yt:flight:int:srp:select":"InternationalFlightCase",
                 "yt:flight:int:checkout:review":"FlightReviewPage",
                 "yt:flight:int:checkout:review:fare rules":"FlightReviewPage",
                 "yt:flight:int:checkout:review:gst":"FlightReviewPage",
@@ -38,7 +39,7 @@ ROW_CLICK_NAME = 8
 event_not_resolved = []
 table_not_logged = []
 #Call the getStatus method to get the basic values
-values.getStatus()
+values.getStatusFromAndroid()
 #Print the basic info about the scenario
 values.printInfo()
 
@@ -67,8 +68,8 @@ def writeSummary():
     global PASSED, FAILED, TOTAL, BLANK
     print("Writing values in Summary Sheet...")
     values.isTableNA()
-    print("NA Table: *************** ")
-    print(values.NA_Tables)
+    # print("NA Table: *************** ")
+    # print(values.NA_Tables)
     worksheet = wb_output.add_worksheet("Summary")
     # worksheet.set_column(1, 0, 25)
     worksheet.merge_range(0, 0, 0, 1, "Summary", format_heading1)
@@ -99,7 +100,7 @@ def writeSummary():
         worksheet.write(10+i+j, 0, table_not_logged[j],format_fail)
         #If the table is not applicable for the current scenario, then mention it.
         if(table_not_logged[j] in values.NA_Tables):
-            print(" ***** Inside: "+table_not_logged[j])
+            # print(" ***** Inside: "+table_not_logged[j])
             worksheet.write(10+i+j, 1, "Not applicable",format_NA)
 
     #create a pie chart
@@ -200,6 +201,16 @@ def writeToSheet(page,dic):
                                 worksheet.write(i, COLUMN+3, "NA", format_NA)
                             else:
                                 worksheet.write(i, COLUMN+3, "FAIL", format_fail)
+                        #Check for Insurance case
+                        elif(key == "adobe.event.inscheck" or key == "adobe.event.insnotcheck"):
+                            if(key == "adobe.event.inscheck" and values.inscheck=="0"):
+                                worksheet.write(i, COLUMN+1, "NA", format_border)
+                                worksheet.write(i, COLUMN+2, "NA", format_border)
+                                worksheet.write(i, COLUMN+3, "NA", format_NA)
+                            elif(key == "adobe.event.insnotcheck" and values.inscheck == "1"):
+                                worksheet.write(i, COLUMN+1, "NA", format_border)
+                                worksheet.write(i, COLUMN+2, "NA", format_border)
+                                worksheet.write(i, COLUMN+3, "NA", format_NA)
                         #Mark it Fail if we don't have the value
                         else:
                             worksheet.write(i, COLUMN+1, "", format_border)
