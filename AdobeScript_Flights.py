@@ -38,8 +38,14 @@ ROW_PAGE_NAME = 2
 ROW_CLICK_NAME = 8
 event_not_resolved = []
 table_not_logged = []
+
 #Call the getStatus method to get the basic values
-values.getStatusFromAndroid()
+values.checkOS()
+if(values.platform == "app android"):
+    values.getStatusFromAndroid()
+else:
+    values.getStatusFromiOS()
+
 #Print the basic info about the scenario
 values.printInfo()
 
@@ -236,11 +242,13 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
         if (("key : value" in line) and ("adobe") in line):
             #Read key and value from log
             key = line.split("value ")[1].split(":")[0].replace("\n","")
-            if("areadobe" in key):
+            if("are adobe" in key):
+                key = key.replace("are adobe","adobe")
+            elif("areadobe" in key):
                 key = key.replace("areadobe","adobe")
             value = line.split("value ")[1].split(":",1)[1].replace("\n","")
             tmp[key] = value;
-            # print(key+"\t:\t"+value)
+            # print("------> "+key+"\t:\t"+value)
         if "-- End" in line:
             # print("Ending collecting the values...")
             # print("Buffer is: ")
