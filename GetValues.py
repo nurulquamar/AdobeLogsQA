@@ -1,373 +1,280 @@
 #import statements
-import re
-import json
-from datetime import datetime
-date_format = '%d/%m/%Y'
+from xlrd import open_workbook
+import xlsxwriter
+import GetValues as values
 
-#initialize all values to blank
-sessionId = platform = fsearch_flightType = fsearch_origin = fsearch_destination = fsearch_depdate = \
-fsearch_arrdate = fsearch_adults = fsearch_child = fsearch_infants = fsearch_class = pmCode = qbCard = promo = platform = ""
-# platform = "app android"
-promofailure = promosuccess = inscheck = insnotcheck = "0"
-isRoundTrip = isInt = isPriceChanged = False
-flightsFound = True
-login_state_before_PaxPage = login_state_from_PaxPage = "logged-in"
-all_promos = []
+#Mapping Pagename values in tables to SheetNames in Workbook
+sheetNameMap = {"yt:flight:home":"FlightHome",
+                "yt:flight:home:origin":"FlightHome",
+                "yt:flight:home:destination":"FlightHome",
+                "yt:flight:home:calendar":"FlightHome",
+                "yt:flight:dom:srp":"FlightSRP",
+                "yt:flight:dom:srp:filter":"FlightSRP",
+                "yt:flight:dom:checkout:review":"FlightReviewPage",
+                "yt:flight:dom:checkout:review:fare rules":"FlightReviewPage",
+                "yt:flight:dom:checkout:review:gst":"FlightReviewPage",
+                "yt:flight:dom:checkout:travellers":"FlightTravellersPage",
+                "yt:flight:dom:checkout:payment":"FlightPaymentPage",
+                "yt:flight:dom:checkout:payment:wallets":"FlightPaymentPage",
+                "yt:flight:int:srp":"FlightSRP",
+                "yt:flight:int:srp:filter":"FlightSRP",
+                "yt:flight:int:srp:select":"InternationalFlightCase",
+                "yt:flight:int:checkout:review":"FlightReviewPage",
+                "yt:flight:int:checkout:review:fare rules":"FlightReviewPage",
+                "yt:flight:int:checkout:review:gst":"FlightReviewPage",
+                "yt:flight:int:checkout:travellers":"FlightTravellersPage",
+                "yt:flight:int:checkout:payment":"FlightPaymentPage",
+                "yt:flight:int:checkout:payment:wallets":"FlightPaymentPage"
+                }
 
-#Keys which are not applicable in case of OW
-valuesNotApplicable = ['adobe.fsearch.arrdate', 'adobe.fsearch.ret.resultnumber', 'adobe.review.ret.class', 'adobe.review.ret.time',
-'adobe.review.ret.id', 'adobe.review.ret.date', 'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank',
-'adobe.review.ret.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id', 'adobe.review.ret.date', 'adobe.review.ret.stops', 'adobe.review.ret.ref',
-'adobe.review.ret.diffrence', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare', 'adobe.review.ret.id']
+#Read input from the master sheet
+wb_input = open_workbook('Flights.xlsx')
+#Write output to the final sheet
+wb_output = xlsxwriter.Workbook('Results_Flights.xlsx')
+sheet_names = wb_input.sheets()
+names = {}
+COLUMN = PASSED = FAILED = TOTAL = BLANK = 0
+ROW_PAGE_NAME = 2
+ROW_CLICK_NAME = 8
+event_not_resolved = []
+table_not_logged = []
 
-NA_Tables = ["FlightSRP-->SRP Track Action (roundtrip case - No Search Result Found)","FlightReviewPage-->Track Action (in case of promosuccess)", "FlightReviewPage-->Track Action (in case of promofailure)",
-"FlightReviewPage-->Track Action (in case of fare change shown)", "FlightReviewPage-->Track Action (in case of continue click on fare change)",
-"FlightReviewPage-->Track Action (in case of select another flight on fare change)", "FlightReviewPage-->Track State (On click of GST)",
-"FlightLoginPage-->Track State (Login page)", "FlightLoginPage-->Track Action (in case of guest booking or guest checkout)", 
-"InternationalFlightCase-->Track State (On SRP page when click on more flights)"]
+#Call the getStatus method to get the basic values
+values.checkOS()
+if(values.platform == "app android"):
+    values.getStatusFromAndroid()
+else:
+    values.getStatusFromiOS()
 
+#Print the basic info about the scenario
+values.printInfo()
 
-def checkOS():
-    global platform
-    with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
-        fileContents = f.read()
-    req = re.findall('platform = ios(.+)',fileContents)
-    if(len(req)>0):
-        # print("OS is iOS.")
-        platform = "app ios"
+#Set Formatting in the sheet
+format_fail = wb_output.add_format({'bold': True, 'font_color': 'red','border':1})
+format_pass = wb_output.add_format({'bold': True, 'font_color': 'green','border':1})
+format_NA = wb_output.add_format({'bold': True, 'font_color': '#5DADE2','border':1})
+format_bold = wb_output.add_format({'bold': True})
+format_heading1 = wb_output.add_format({'bold': True,'bg_color':'#82C1EB','border':2,'align': 'center'})
+format_heading2 = wb_output.add_format({'bold': True,'bg_color':'#8DE1F0','border':2})
+format_border = wb_output.add_format({'border':1})
+format_bold_border = wb_output.add_format({'border':1, 'bold':True})
+
+#Read all the table names from the Input sheet in format Sheet name --> Table name
+def getAllTableNames():
+    for s in range(0,len(sheet_names)):
+        currentSheet = wb_input.sheet_by_index(s)
+        for c in range(0,currentSheet.ncols):
+            if("Track" in currentSheet.cell(0,c).value):
+                table_not_logged.append(sheet_names[s].name+"-->"+str(currentSheet.cell(0,c).value))
+    # print(" =============== All table names: ")
+    # print(table_not_logged)
+
+#Write the summary of total events in a new sheet named Summary
+def writeSummary():
+    global PASSED, FAILED, TOTAL, BLANK
+    print("Writing values in Summary Sheet...")
+    values.isTableNA()
+    # print("NA Table: *************** ")
+    # print(values.NA_Tables)
+    worksheet = wb_output.add_worksheet("Summary")
+    # worksheet.set_column(1, 0, 25)
+    worksheet.merge_range(0, 0, 0, 1, "Summary", format_heading1)
+    worksheet.write(1, 0, "Total Events Passed", format_heading2)
+    worksheet.set_column(1, 0, 25)
+    worksheet.write(1, 1, TOTAL, format_bold_border)
+    worksheet.write(2, 0, "Correct Events Passed", format_heading2)
+    worksheet.set_column(2, 0, 25)
+    worksheet.write(2, 1, PASSED, format_bold_border)
+    worksheet.write(3, 0, "Incorrect Events Passed", format_heading2)
+    worksheet.set_column(3, 0, 25)
+    worksheet.write(3, 1, FAILED, format_bold_border)
+    worksheet.write(4, 0, "Blank Events Passed", format_heading2)
+    worksheet.set_column(4, 0, 25)
+    worksheet.write(4, 1, BLANK, format_bold_border)
+
+    #Print the events captured in Logs, which couldn't be mapped to tables in Input sheet
+    worksheet.write(6, 0, "Following logs didn't match the tables",format_heading1)
+    worksheet.write(6, 1, "Reasons",format_heading1)
+    worksheet.set_column(6, 0, 40)
+    for i in range(0,len(event_not_resolved)):
+        worksheet.write(7+i, 0, event_not_resolved[i],format_fail)
+
+    #Print the table names from input sheet, for which no events were captured in Logs.
+    worksheet.write(9+i, 0, "Following tables didn't match the logs",format_heading1)
+    worksheet.write(9+i, 1, "Reasons",format_heading1)
+    for j in range(0,len(table_not_logged)):
+        worksheet.write(10+i+j, 0, table_not_logged[j],format_fail)
+        #If the table is not applicable for the current scenario, then mention it.
+        if(table_not_logged[j] in values.NA_Tables):
+            # print(" ***** Inside: "+table_not_logged[j])
+            worksheet.write(10+i+j, 1, "Not applicable",format_NA)
+
+    #create a pie chart
+    chart = wb_output.add_chart({'type': 'pie'})
+    chart.add_series({
+        'categories': '=Summary!$A$3:$A$5',
+        'values':     '=Summary!$B$3:$B$5',
+        'data_labels': {'value': True},
+        'points': [
+            {'fill': {'color': '#58D68D'}},
+            {'fill': {'color': '#EC7063'}},
+            {'fill': {'color': '#CACFD2'}},
+        ],
+    })
+    worksheet.insert_chart('C3', chart)
+
+#Write key, expected values, actual values and Pass/Fail to Output sheet
+def writeToSheet(page,dic):
+    global COLUMN, PASSED, FAILED, TOTAL, BLANK
+    if(page.replace("_",":") in sheetNameMap.keys()):
+        if("content.pagename" in str(dic)):
+            uniqueKey = "adobe.content.pagename"
+            uniqueRow = ROW_PAGE_NAME
+            uniqueValue = page.replace("_",":")
+        elif("link.pagename" in str(dic)):
+            uniqueKey = "adobe.link.clinkname"
+            uniqueRow = ROW_CLICK_NAME
+            uniqueValue = dic['adobe.link.clinkname']
+
+        #Find the sheet index to be read
+        for sname in sheet_names:
+            if sname.name == sheetNameMap[page.replace("_",":")]:
+                sheetNumber = sheet_names.index(sname)
+
+        #Read Sheet by Index Number
+        inputSheet = wb_input.sheet_by_index(sheetNumber)
+
+        #find the cell that has the same value as Pagename.
+        for col in range(0,inputSheet.ncols - 1):
+            keyCol = inputSheet.cell(uniqueRow,col).value
+            ValueCol  = inputSheet.cell(uniqueRow,col+1).value
+            if((values.isInt == True) and ("dom") in ValueCol):
+                ValueCol = ValueCol.replace("dom","int")
+            # print("Unique Key:Val--> "+uniqueKey+" : "+uniqueValue+"\tActual Key:Val-->"+keyCol+" : "+ValueCol)
+            if((uniqueKey == keyCol.strip()) and (uniqueValue == ValueCol.strip())):
+                # print("Page Name Found at "+str(uniqueRow)+", "+str(col))
+                tableHeading = inputSheet.cell(0,col).value
+                print("Table Heading: "+tableHeading)
+
+                #Create a sheet with same name as Input Sheet
+                worksheetName = sheetNameMap[page.replace("_",":")]
+                if wb_output.get_worksheet_by_name(worksheetName) == None:
+                    print("Creating new sheet with name: "+worksheetName)
+                    worksheet = wb_output.add_worksheet(worksheetName)
+                    COLUMN = 0
+                else:
+                    print("Worksheet named: "+worksheetName+" already exists. Using the existing one.")
+                    worksheet = wb_output.get_worksheet_by_name(worksheetName)
+
+                #Write column headings
+                print("Writing column headings in the sheet")
+                worksheet.write(1, COLUMN+0, "Key",format_heading2)
+                worksheet.write(1, COLUMN+1, "Expected Value",format_heading2)
+                worksheet.write(1, COLUMN+2, "Actual Value",format_heading2)
+                worksheet.write(1, COLUMN+3, "Pass/Fail",format_heading2)
+                worksheet.merge_range(0,COLUMN,0,COLUMN+3, tableHeading, format_heading1)
+
+                #Loop to write values in Output Sheet
+                for i in range(2,inputSheet.nrows):
+                    key = inputSheet.cell(i,col).value
+                    #Check to avoid BLANK values
+                    if(key!=""):
+                        if(worksheetName+"-->"+tableHeading in table_not_logged):
+                            table_not_logged.remove(worksheetName+"-->"+tableHeading)
+                        #Write the key
+                        expectedValue = inputSheet.cell(i,col+1).value
+                        worksheet.write(i, COLUMN+0, key, format_border)
+                        worksheet.set_column(i, COLUMN+0, 20)
+                        #Check if the key exists in our Dictionary from Logs
+                        if key in str(dic):
+                            TOTAL+= 1
+                            #Validate the expected and actual values
+                            EXP, ACT, PASS = values.validateValues(key,expectedValue,dic[key],worksheetName)
+                            print(str(key)+"\t::\t"+str(EXP)+"\t::\t"+str(ACT))
+                            worksheet.write(i, COLUMN+1, EXP, format_border)
+                            worksheet.write(i, COLUMN+2, ACT, format_border)
+                            if(PASS):
+                                worksheet.write(i, COLUMN+3, "PASS", format_pass)
+                                PASSED+= 1
+                            else:
+                                worksheet.write(i, COLUMN+3, "FAIL", format_fail)
+                                FAILED+= 1
+                        #Check if the value is not applicable
+                        elif(key in values.valuesNotApplicable):
+                            if(values.isRoundTrip==False):
+                                worksheet.write(i, COLUMN+1, "NA", format_border)
+                                worksheet.write(i, COLUMN+2, "NA", format_border)
+                                worksheet.write(i, COLUMN+3, "NA", format_NA)
+                            else:
+                                worksheet.write(i, COLUMN+3, "FAIL", format_fail)
+                        #Check for Insurance case
+                        elif(key == "adobe.event.inscheck" or key == "adobe.event.insnotcheck"):
+                            if(key == "adobe.event.inscheck" and values.inscheck=="0"):
+                                worksheet.write(i, COLUMN+1, "NA", format_border)
+                                worksheet.write(i, COLUMN+2, "NA", format_border)
+                                worksheet.write(i, COLUMN+3, "NA", format_NA)
+                            elif(key == "adobe.event.insnotcheck" and values.inscheck == "1"):
+                                worksheet.write(i, COLUMN+1, "NA", format_border)
+                                worksheet.write(i, COLUMN+2, "NA", format_border)
+                                worksheet.write(i, COLUMN+3, "NA", format_NA)
+                        #Mark it Fail if we don't have the value
+                        else:
+                            worksheet.write(i, COLUMN+1, "", format_border)
+                            worksheet.write(i, COLUMN+2, "", format_border)
+                            worksheet.write(i, COLUMN+3, "FAIL", format_fail)
+                            BLANK+=1
+                            print("Key: "+key+" not found in current event in device logs.")
+                print("*"*80)
+                break
+        COLUMN+= 5
     else:
-        # print("OS is Android.")
-        platform = "app android"
+        print(page+" cannot be resolved!")
+        event_not_resolved.append(page)
 
+# Start of script
+tmp = {}
+getAllTableNames()
+with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
+    for line in f:
+        if "Start --" in line:
+            # print("Starting collecting the values...")
+            tmp.clear()
+        if (("key : value" in line) and ("adobe") in line):
+            #Read key and value from log
+            key = line.split("value ")[1].split(":")[0].replace("\n","")
+            if("are adobe" in key):
+                key = key.replace("are adobe","adobe")
+            elif("areadobe" in key):
+                key = key.replace("areadobe","adobe")
+            value = line.split("value ")[1].split(":",1)[1].replace("\n","")
+            tmp[key] = value;
+            print("------> "+key+"\t:\t"+value)
+        if "-- End" in line:
+            # print("Ending collecting the values...")
+            # print("Buffer is: ")
 
-def getStatusFromAndroid():
-    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged, fileContents,fsearch_depdate, fsearch_arrdate, fsearch_origin, fsearch_destination, fsearch_infants, fsearch_child, fsearch_adults, fsearch_class,sessionId, fsearch_flightType, isRoundTrip, isInt, promo, inscheck, insnotcheck, saveQBCard, daysToDep, daysToArr, all_promos, pmCode
-    with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
-        fileContents = f.read()
+            #Get the pagename, for track state 
+            if "adobe.content.pagename" in str(tmp):
+                pageName = tmp['adobe.content.pagename'].replace(":","_")
+                print("Tracking type is: State Tracking")
+                print("Page Name: "+pageName)
+                print("Dictionary: ")
+                print(tmp)
+                writeToSheet(pageName,tmp)
 
-    promoMatches = re.findall('Request Parameters(.+)promoContext(.+)\n',fileContents)
-    for current in promoMatches:
-        if("promoCode=" in str(current)):
-            p = str(current).split("promoCode=")[1].split(",")[0]
-            if not(p in all_promos):
-                all_promos.append(p)
-    # print("All promo codes applied: ")
-    # print(all_promos)
+            # Get the pagename, for track action 
+            elif "adobe.link.pagename" in str(tmp):
+                pageName = tmp['adobe.link.pagename'].replace(":","_")
+                print("Tracking type is: Action Tracking")
+                print("Page Name: "+pageName)
+                print("Dictionary: ")
+                print(tmp)
+                writeToSheet(pageName,tmp)
 
-    #Check the Search Params
-    searchReq = re.findall('Nimble search Criteria (.+)\n',fileContents)
-    req_params =  searchReq[0]
-    #convert it to JSON
-    j = json.loads(req_params)
-    #get Values from JSON
-    sessionId = j['sessionId']
-    fsearch_flightType = j["tripType"].lower()
-    fsearch_origin = j['tripList'][0]["origin"].lower()
-    fsearch_destination = j['tripList'][0]["destination"].lower()
-    fsearch_depdate = j['tripList'][0]['departureDate']
-    if(len(j['tripList']))>1:
-        isRoundTrip = True
-        # print("This is a Round Trip Flow...................")
-        fsearch_arrdate = j['tripList'][1]['departureDate']
-    fsearch_infants = j["noOfInfants"]
-    fsearch_child = j["noOfChildren"]
-    fsearch_adults = j["noOfAdults"]
-    fsearch_class = j["travelClass"].lower()
-    if(j["domain"]=="INT"):
-        isInt = True
+            # print("Page Name: "+pageName)
+            # print("Dictionary: ")
+            # print(tmp)
+            # writeToSheet(pageName,tmp)
 
-    #Check the payment mode
-    payMode = re.findall('Request Parameters(.+)paymentOptionParameters=(.+),',fileContents)
-    # print("Pay mode: ")
-    # print(payMode)
-    pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
-
-    quickBook = re.findall('saveQBCard%3Dtrue(.+)',fileContents)
-    if len(quickBook)>0:
-        saveQBCard = "yes"
-    else:
-        saveQBCard = "no"
-
-    insurance = re.findall('onOptionalAddOnClicked(.+)Insurance is checked',fileContents)
-    if len(insurance)>0:
-        inscheck = "1"
-    else:
-        insnotcheck = "1"
-
-    depDate = datetime.strptime(fsearch_depdate, date_format)
-    if isRoundTrip:
-        arrDate = datetime.strptime(fsearch_arrdate, date_format)
-    today = datetime.today()
-    daysToDep = depDate - today
-    if isRoundTrip:
-        daysToArr = arrDate - today
-
-    # Check if user was logged in before the flight pax page
-    getPromoLogs = re.findall('Parameters::: {(.*?)email=,(.*?)}', fileContents)
-    if(len(getPromoLogs)>=1):
-        login_state_before_PaxPage = "guest"
-    else:
-        login_state_before_PaxPage = "logged-in"
-
-    # Check if user was logged in after review page
-    saveReviewLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
-    if ("guest" in str(saveReviewLogs)):
-        login_state_before_PaxPage = login_state_from_PaxPage = "guest"
-    else:
-        login_state_from_PaxPage = "logged-in"
-
-    #Check if flight results were fetched
-    depFlightCount = re.findall('(?<=dep.resultnumber:)(?s)(\d+)',fileContents)
-    # print(" Departure Flight Count : "+str(depFlightCount))
-    if(depFlightCount=="0"):
-        flightsFound = False
-    if(isRoundTrip):
-        retFlightCount = re.findall('(?<=ret.resultnumber:)(?s)(\d+)',fileContents)
-        # print(" Return Flight Count : "+str(retFlightCount))
-        if(retFlightCount == "0"):
-            flightsFound = False
-
-    #Check for promo validation
-    promoVal = re.findall('ResponseContainer(.+)ValidatePromocode(.+)]',fileContents)
-    if("Invalid promocode" in str(promoVal)):
-        promofailure = "1"
-    if("resCode=200" in str(promoVal)):
-        promosuccess = "1"
-
-    #Check for price Changed
-    priceChanged = re.findall('responseString(.+)\"priceChanged\":true',fileContents)
-    if(len(priceChanged)>0):
-        isPriceChanged = True
-
-def getStatusFromiOS():
-    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged, fileContents,fsearch_depdate, fsearch_arrdate, fsearch_origin, fsearch_destination, fsearch_infants, fsearch_child, fsearch_adults, fsearch_class,sessionId, fsearch_flightType, isRoundTrip, isInt, promo, inscheck, insnotcheck, saveQBCard, daysToDep, daysToArr, all_promos, pmCode
-    with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
-        fileContents = f.read()
-
-    promoMatches = re.findall('promoCode = (.+);',fileContents)
-    for current in promoMatches:
-        # print(" Current : ")
-        # print(current)
-        if not(current in all_promos):
-            all_promos.append(current)
-    print("All promo codes applied: ")
-    print(all_promos)
-
-    #Check the Search Params
-    searchReq = re.findall('Nimble search Criteria (.+)\n',fileContents)
-    req_params =  searchReq[0]
-    #convert it to JSON
-    j = json.loads(req_params)
-    #get Values from JSON
-    sessionId = j['sessionId']
-    fsearch_flightType = j["tripType"].lower()
-    fsearch_origin = j['tripList'][0]["origin"].lower()
-    fsearch_destination = j['tripList'][0]["destination"].lower()
-    fsearch_depdate = j['tripList'][0]['departureDate']
-    if(len(j['tripList']))>1:
-        isRoundTrip = True
-        # print("This is a Round Trip Flow...................")
-        fsearch_arrdate = j['tripList'][1]['departureDate']
-    fsearch_infants = j["noOfInfants"]
-    fsearch_child = j["noOfChildren"]
-    fsearch_adults = j["noOfAdults"]
-    fsearch_class = j["travelClass"].lower()
-    if(j["domain"]=="INT"):
-        isInt = True
-
-    #Check the payment mode
-    payMode = re.findall('Request Parameters(.+)paymentOptionParameters=(.+),',fileContents)
-    print("Pay mode: ")
-    print(payMode)
-    pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
-
-    quickBook = re.findall('saveQBCard%3Dtrue(.+)',fileContents)
-    if len(quickBook)>0:
-        saveQBCard = "yes"
-    else:
-        saveQBCard = "no"
-
-    insurance = re.findall('onOptionalAddOnClicked(.+)Insurance is checked',fileContents)
-    if len(insurance)>0:
-        inscheck = "1"
-    else:
-        insnotcheck = "1"
-
-    depDate = datetime.strptime(fsearch_depdate, date_format)
-    if isRoundTrip:
-        arrDate = datetime.strptime(fsearch_arrdate, date_format)
-    today = datetime.today()
-    daysToDep = depDate - today
-    if isRoundTrip:
-        daysToArr = arrDate - today
-
-    # Check if user was logged in before the flight pax page
-    getPromoLogs = re.findall('Parameters::: {(.*?)email=,(.*?)}', fileContents)
-    if(len(getPromoLogs)>=1):
-        login_state_before_PaxPage = "guest"
-    else:
-        login_state_before_PaxPage = "logged-in"
-
-    # Check if user was logged in after review page
-    saveReviewLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
-    if ("guest" in str(saveReviewLogs)):
-        login_state_before_PaxPage = login_state_from_PaxPage = "guest"
-    else:
-        login_state_from_PaxPage = "logged-in"
-
-    #Check if flight results were fetched
-    depFlightCount = re.findall('(?<=dep.resultnumber:)(?s)(\d+)',fileContents)
-    print(" Departure Flight Count : "+str(depFlightCount))
-    if(depFlightCount=="0"):
-        flightsFound = False
-    if(isRoundTrip):
-        retFlightCount = re.findall('(?<=ret.resultnumber:)(?s)(\d+)',fileContents)
-        print(" Return Flight Count : "+str(retFlightCount))
-        if(retFlightCount == "0"):
-            flightsFound = False
-
-    #Check for promo validation
-    promoVal = re.findall('ResponseContainer(.+)ValidatePromocode(.+)]',fileContents)
-    if("Invalid promocode" in str(promoVal)):
-        promofailure = "1"
-    if("resCode=200" in str(promoVal)):
-        promosuccess = "1"
-
-    #Check for price Changed
-    priceChanged = re.findall('responseString(.+)\"priceChanged\":true',fileContents)
-    if(len(priceChanged)>0):
-        isPriceChanged = True
-
-
-def isTableNA():
-    global NA_Tables
-    #Remove those tables from NA_Tables which are applicable
-
-    #If flight results are found, the "No results found" table is NA
-    if not(flightsFound):
-        NA_Tables.remove("FlightSRP-->SRP Track Action (roundtrip case - No Search Result Found)")
-
-    #If promo validation did not fail
-    if not(promofailure=="0"):
-        NA_Tables.remove("FlightReviewPage-->Track Action (in case of promofailure)")
-
-    #If promo validation did not succeed
-    if not(promosuccess=="0"):
-        NA_Tables.remove("FlightReviewPage-->Track Action (in case of promosuccess)")
-
-    #if Dom flow
-    if (isInt==True):
-        NA_Tables.remove("InternationalFlightCase-->Track State (On SRP page when click on more flights)")
-
-    #If price was changed
-    if(isPriceChanged == True):
-        NA_Tables.remove("FlightReviewPage-->Track Action (in case of fare change shown)")
-        NA_Tables.remove("FlightReviewPage-->Track Action (in case of continue click on fare change)")
-        NA_Tables.remove("FlightReviewPage-->Track Action (in case of select another flight on fare change)")
-
-    if(login_state_from_PaxPage=="guest"):
-        NA_Tables.remove("FlightLoginPage-->Track Action (in case of guest booking or guest checkout)")
-
-
-def printInfo():
-    maxSize = 40
-    print('+' + '-'*48 + '+')
-    print('| %-*.*s |' % (maxSize, maxSize, "\tOS : "+platform.split(" ")[1].title()))
-    if(isInt):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tSector : International"))
-        # print()
-    else:
-        print('| %-*.*s |' % (maxSize, maxSize, "\tSector : Domestic"))
-    if(isRoundTrip):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tType : RoundTrip"))
-    else:
-        print('| %-*.*s |' % (maxSize, maxSize, "\tType : OneWay"))
-    print('| %-*.*s |' % (maxSize, maxSize, "\tOrigin : "+fsearch_origin.upper()))
-    print('| %-*.*s |' % (maxSize, maxSize, "\tDestination : "+fsearch_destination.upper()))
-    print('| %-*.*s |' % (maxSize, maxSize, "\tDepart Date : "+fsearch_depdate))
-    if(isRoundTrip):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tArrival Date : "+fsearch_arrdate))
-    print('| %-*.*s |' % (maxSize, maxSize, "\t"+str(fsearch_adults)+" Adults || "+str(fsearch_child)+" Children || "+str(fsearch_infants)+" Infants"))
-    if(login_state_before_PaxPage == "logged-in"):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tUser was already logged-in"))
-    elif(login_state_from_PaxPage == "guest"):
-        print('| %-*.*s |' % (maxSize, maxSize, "\tUser continued as Guest "))
-    else:
-        print('| %-*.*s |' % (maxSize, maxSize, "\tUser was logged-in during the flow."))
-    print('+' + '-'*48+ '+')
-    print("\n\n")
-
-def ifNumber(expected):
-    if(".0" in expected):
-        try:
-            float(expected)
-            return expected.split(".")[0]
-        except ValueError:
-            print("Exception: Not a float value")
-    else:
-        return expected
-
-def reviewDays():
-    if isRoundTrip:
-        return str(daysToDep.days + 1)+"|"+str(daysToArr.days + 1)
-    else:
-        return str(daysToDep.days + 1)
-
-def validateValues(key, expected, actual, sheetName):
-    global login_state_from_PaxPage, login_state_before_PaxPage
-    #Key:Value pairs which can  be cross-verified from the device logs
-    valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,
-'adobe.link.platform':platform, 'adobe.link.sessionid':sessionId,
-'adobe.fsearch.flightType':fsearch_flightType,'adobe.fsearch.origin':fsearch_origin,
-'adobe.fsearch.destination':fsearch_destination,'adobe.fsearch.depdate':fsearch_depdate,
-'adobe.fsearch.arrdate':fsearch_arrdate,'adobe.fsearch.adults':fsearch_adults,'adobe.fsearch.child':fsearch_child,
-'adobe.fsearch.infants':fsearch_infants,'adobe.fsearch.class':fsearch_class,'adobe.review.depcity':fsearch_origin,
-'adobe.review.arrcity':fsearch_destination, 'adobe.review.days':reviewDays(),
-'adobe.review.adults': fsearch_adults, 'adobe.review.child':fsearch_child, 'adobe.review.infants':fsearch_infants,
-'adobe.review.dep.class':fsearch_class,'adobe.review.dep.date':fsearch_depdate,'adobe.review.ret.date':fsearch_arrdate,
-'adobe.review.flightType':fsearch_flightType, 'adobe.event.promosuccess':promosuccess,
-'adobe.event.promofailure':promofailure, 'adobe.event.inscheck':inscheck, 'adobe.event.insnotcheck':insnotcheck,
-'adobe.review.checkouttype':'logged-in', 'adobe.review.paymethod':pmCode+"|"+saveQBCard, 'adobe.moreflights.vendorname':"b2c"
-}
-    #Keys for which the values cannot be verified from Logs. Here we are assuming that the values are correct.
-    valuesNotInLogs = ['adobe.fsearch.dep.resultnumber','adobe.fsearch.ret.resultnumber','adobe.sort.filterterm','adobe.review.duration',
-    'adobe.review.dep.time', 'adobe.review.dep.id', 'adobe.review.dep.stops', 'adobe.review.dep.ref', 'adobe.review.dep.difference',
-    'adobe.review.dep.searchrank', 'adobe.review.dep.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id',
-    'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare',
-    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number','adobe.sort.sorttype']
-
-    key = str(key)
-    expected = str(expected)
-    actual = str(actual)
-    expected = ifNumber(expected)
-    if(key in valuesFromLogs.keys()):
-        # print ("Expected value for Key: "+key+" needs to be extracted from Device Logs")
-        expected = str(valuesFromLogs[key])
-    elif(key in valuesNotInLogs):
-        # print ("Expected value for Key: "+key+" cannot be extracted from Device Logs. Assuming the passed value to be correct.")
-        return (expected, actual, True)
-    elif(("pagename" in key) and (isInt==True)):
-        expected = expected.replace("dom","int")
-    elif(("domestic" in expected) and (isInt==True)):
-        expected = expected.replace("domestic","international")
-
-    #Check the promoCode Case
-    if(key == "adobe.promo.promocode"):
-        return(str(all_promos), actual, actual.upper() in all_promos)
-
-    #Check the login cases
-    elif(key == "adobe.user.loginstatus" or key == "adobe.review.checkouttype"):
-        #If the user went till bank page as guest, then pass the value as guest for all pages.
-        if(login_state_from_PaxPage == "guest"):
-            expected = "guest"
-        #If the user was logged in while making the search, then pass the value as logged-in for all pages.
-        elif(login_state_before_PaxPage == "logged-in"):
-            expected = "logged-in"
-        #If the used logged-in or registered during the flow then pass the value accordingly on all pages.
-        elif(login_state_before_PaxPage=="guest" and login_state_from_PaxPage=="logged-in"):
-            # print("Sheet name: "+sheetName)
-            if(sheetName in ["FlightHome","FlightSRP","FlightReviewPage"]):
-                expected = "guest"
-            else:
-                expected = "logged-in"
-    return (expected, actual, str(expected)==str(actual))
+writeSummary()
+wb_output.close()
