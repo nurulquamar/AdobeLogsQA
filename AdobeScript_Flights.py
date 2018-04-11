@@ -248,7 +248,7 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
                 key = key.replace("areadobe","adobe")
             value = line.split("value ")[1].split(":",1)[1].replace("\n","")
             tmp[key] = value;
-            # print("------> "+key+"\t:\t"+value)
+            print("------> "+key+"\t:\t"+value)
         if "-- End" in line:
             # print("Ending collecting the values...")
             # print("Buffer is: ")
@@ -257,16 +257,24 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
             if "adobe.content.pagename" in str(tmp):
                 pageName = tmp['adobe.content.pagename'].replace(":","_")
                 print("Tracking type is: State Tracking")
+                print("Page Name: "+pageName)
+                print("Dictionary: ")
+                print(tmp)
+                writeToSheet(pageName,tmp)
 
             # Get the pagename, for track action 
             elif "adobe.link.pagename" in str(tmp):
                 pageName = tmp['adobe.link.pagename'].replace(":","_")
                 print("Tracking type is: Action Tracking")
+                print("Page Name: "+pageName)
+                print("Dictionary: ")
+                print(tmp)
+                writeToSheet(pageName,tmp)
 
-            print("Page Name: "+pageName)
-            print("Dictionary: ")
-            print(tmp)
-            writeToSheet(pageName,tmp)
+            # print("Page Name: "+pageName)
+            # print("Dictionary: ")
+            # print(tmp)
+            # writeToSheet(pageName,tmp)
 
 writeSummary()
 wb_output.close()
