@@ -42,7 +42,7 @@ def checkOS():
 
 
 def getStatusFromAndroid():
-    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged, fileContents,fsearch_depdate, fsearch_arrdate, fsearch_origin, fsearch_destination, fsearch_infants, fsearch_child, fsearch_adults, fsearch_class,sessionId, fsearch_flightType, isRoundTrip, isInt, promo, inscheck, insnotcheck, saveQBCard, daysToDep, daysToArr, all_promos, pmCode
+    global login_state_before_PaxPage, login_state_from_PaxPage, promofailure, promosuccess, isPriceChanged, fileContents,fsearch_depdate, fsearch_arrdate, fsearch_origin, fsearch_destination, fsearch_infants, fsearch_child, fsearch_adults, fsearch_class, sessionId, fsearch_flightType, isRoundTrip, isInt, promo, inscheck, insnotcheck, saveQBCard, daysToDep, daysToArr, all_promos, pmCode
     with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
         fileContents = f.read()
 
@@ -161,9 +161,10 @@ def getStatusFromiOS():
     if(len(searchReq)>0):
         req_params =  searchReq[0]
         sessionId = str(searchReq[0]).split("sessionId\":")[1].split("\"")[1]
-        fsearch_flightType = str(searchReq[0]).split("tripType\":")[1].split("\"")[1]
-        fsearch_origin = str(searchReq[0]).split("origin\":")[1].split("\"")[1]
-        fsearch_destination = str(searchReq[0]).split("destination\":")[1].split("\"")[1]
+        fsearch_flightType = str(searchReq[0]).split("tripType\":")[1].split("\"")[1].lower()
+        fsearch_origin = str(searchReq[0]).split("origin\":")[1].split("\"")[1].lower()
+        print("ORIGIN:"+fsearch_origin)
+        fsearch_destination = str(searchReq[0]).split("destination\":")[1].split("\"")[1].lower()
         dates = re.findall('departureDate\":\"(\d+)-(\d+)-(\d+)',str(searchReq[0]))
         # print("dates")
         # print(dates)
@@ -183,7 +184,7 @@ def getStatusFromiOS():
         fsearch_infants = str(searchReq[0]).split("noOfInfants\":")[1].split(",\"")[0]
         fsearch_child = str(searchReq[0]).split("noOfChildren\":")[1].split(",\"")[0]
         fsearch_adults = str(searchReq[0]).split("noOfAdults\":")[1].split(",\"")[0]
-        fsearch_class = str(searchReq[0]).split("travelClass\":")[1].split("\"")[1]
+        fsearch_class = str(searchReq[0]).split("travelClass\":")[1].split("\"")[1].lower()
         if(str(searchReq[0]).split("domain\":")[1].split("\"")[1]=="INT"):
             isInt = True
 
@@ -191,11 +192,10 @@ def getStatusFromiOS():
     else:
         searchReq = re.findall('(.+)getFlightsFromPresto.htm(.+)',fileContents)
         # print(" req : ")
-        # print(searchReq)
         sessionId = str(searchReq[0]).split("sessionId=")[1].split("&")[0]
-        fsearch_flightType = str(searchReq[0]).split("tripType=")[1].split("&")[0]
-        fsearch_origin = str(searchReq[0]).split("tripList%5B0%5D%2Eorigin=")[1].split("&")[0]
-        fsearch_destination = str(searchReq[0]).split("tripList%5B0%5D%2Edestination=")[1].split("&")[0]
+        fsearch_flightType = str(searchReq[0]).split("tripType=")[1].split("&")[0].lower()
+        fsearch_origin = str(searchReq[0]).split("tripList%5B0%5D%2Eorigin=")[1].split("&")[0].lower()
+        fsearch_destination = str(searchReq[0]).split("tripList%5B0%5D%2Edestination=")[1].split("&")[0].lower()
         fsearch_depdate = str(searchReq[0]).split("tripList%5B0%5D%2EdepartureDate=")[1].split("&")[0]
         fsearch_depdate = urllib.parse.unquote(fsearch_depdate)[:10]
         print("Dep Date: "+fsearch_depdate)
@@ -207,25 +207,28 @@ def getStatusFromiOS():
         fsearch_infants = str(searchReq[0]).split("noOfInfants=")[1].split("&")[0]
         fsearch_child = str(searchReq[0]).split("noOfChildren=")[1].split("&")[0]
         fsearch_adults = str(searchReq[0]).split("noOfAdults=")[1].split("&")[0]
-        fsearch_class = str(searchReq[0]).split("travelClass=")[1].split("&")[0]
+        fsearch_class = str(searchReq[0]).split("travelClass=")[1].split("&")[0].lower()
         if(str(searchReq[0]).split("travelClass=")[1].split("&")[0]=="INT"):
             isInt = True
 
     #Check the payment mode
     payMode = re.findall('paymentOptionParameters = (.+)',fileContents)
-    # print("Pay mode: ")
-    # print(payMode)
+    print("Pay mode: ")
+    print(payMode)
     # print("")
-    pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
+    if(len(payMode)>0):
+        pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
+    print("##################################### " +pmCode)
     quickBook = re.findall('saveQBCard(.+)',fileContents)
     if(len(quickBook)>0):
         if "true" in quickBook[0]:
             saveQBCard = "yes"
+        saveQBCard = "yes"
     else:
         saveQBCard = "no"
+    print(saveQBCard)
 
-    insurance = re.findall('onOptionalAddOnClicked(.+)Insurance is checked',fileContents)
-    if len(insurance)>0:
+    if ("mbox = insuranceChecked" in fileContents):
         inscheck = "1"
     else:
         insnotcheck = "1"
@@ -239,18 +242,23 @@ def getStatusFromiOS():
         daysToArr = arrDate - today
 
     # # Check if user was logged in before the flight pax page
-    # getPromoLogs = re.findall('Parameters::: {(.*?)email=,(.*?)}', fileContents)
-    # if(len(getPromoLogs)>=1):
-    #     login_state_before_PaxPage = "guest"
-    # else:
-    #     login_state_before_PaxPage = "logged-in"
+    getPromoLogs = re.findall('getPromoCodeList3(.+)email=&', fileContents)
+    #print(" ########################################################### Get promo : ")
+    #print(getPromoLogs)
+    if(len(getPromoLogs)>0):
+        login_state_before_PaxPage = "guest"
+    else:
+        login_state_before_PaxPage = "logged-in"
+
 
     # # Check if user was logged in after review page
-    # saveReviewLogs = re.findall('\"userId\":\"(.*?)\"}', fileContents, re.S)
-    # if ("guest" in str(saveReviewLogs)):
-    #     login_state_before_PaxPage = login_state_from_PaxPage = "guest"
-    # else:
-    #     login_state_from_PaxPage = "logged-in"
+    saveReviewLogs = re.findall('reviewJson(.+)"userId(.*?),', fileContents, re.S)
+    #print("++++++++++++++++++++++++++++++++++++++++++++++++ SaveReview: ")
+    #print(saveReviewLogs)
+    if ("guest" in str(saveReviewLogs)):
+        login_state_before_PaxPage = login_state_from_PaxPage = "guest"
+    else:
+        login_state_from_PaxPage = "logged-in"
 
     #Check if flight results were fetched
     depFlightCount = re.findall('(?<=dep.resultnumber:)(?s)(\d+)',fileContents)
@@ -263,12 +271,14 @@ def getStatusFromiOS():
         if(retFlightCount == "0"):
             flightsFound = False
 
+    print(" ----------------------------------------------------- ")
     # #Check for promo validation
-    # promoVal = re.findall('ResponseContainer(.+)ValidatePromocode(.+)]',fileContents)
-    # if("Invalid promocode" in str(promoVal)):
-    #     promofailure = "1"
-    # if("resCode=200" in str(promoVal)):
-    #     promosuccess = "1"
+    if("Invalid promocode" in fileContents):
+        print(" Promo fail ------ 1")
+        promofailure = "1"
+    if("resMessage = \"Congratulations" in fileContents):
+        promosuccess = "1"
+        print(" Promo success ------ 1")
 
     # #Check for price Changed
     # priceChanged = re.findall('responseString(.+)\"priceChanged\":true',fileContents)
@@ -350,8 +360,8 @@ def reviewDays():
     else:
         return str(daysToDep.days + 1)
 
-def validateValues(key, expected, actual, sheetName):
-    global login_state_from_PaxPage, login_state_before_PaxPage
+def validateValues(key, expected, actual, sheetName): 
+    global login_state_from_PaxPage, login_state_before_PaxPage, pmCode, saveQBCard, promosuccess, promofailure
     #Key:Value pairs which can  be cross-verified from the device logs
     valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,
 'adobe.link.platform':platform, 'adobe.link.sessionid':sessionId,
