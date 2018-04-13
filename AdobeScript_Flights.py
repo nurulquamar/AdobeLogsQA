@@ -224,11 +224,11 @@ def writeToSheet(page,dic):
                             worksheet.write(i, COLUMN+3, "FAIL", format_fail)
                             BLANK+=1
                             print("Key: "+key+" not found in current event in device logs.")
-                print("*"*80)
+                # print("*"*80)
                 break
         COLUMN+= 5
     else:
-        print(page+" cannot be resolved!")
+        print(page+" pagename cannot be resolved!")
         event_not_resolved.append(page)
 
 # Start of script
@@ -248,7 +248,7 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
                 key = key.replace("areadobe","adobe")
             value = line.split("value ")[1].split(":",1)[1].replace("\n","")
             tmp[key] = value;
-            print("------> "+key+"\t:\t"+value)
+            # print("------> "+key+"\t:\t"+value)
         if "-- End" in line:
             # print("Ending collecting the values...")
             # print("Buffer is: ")
@@ -270,7 +270,9 @@ with open("AdobeLogs.txt", encoding='ISO-8859-1', errors='ignore') as f:
                 print("Dictionary: ")
                 print(tmp)
                 writeToSheet(pageName,tmp)
-
+            print("\n\n")
+            print(" - * - "*20)
+            print("\n\n")
             # print("Page Name: "+pageName)
             # print("Dictionary: ")
             # print(tmp)
