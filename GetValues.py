@@ -34,10 +34,10 @@ def checkOS():
         fileContents = f.read()
     req = re.findall('com.apple.mobile(.+)',fileContents)
     if(len(req)>0):
-        print("OS is iOS.")
+        # print("OS is iOS.")
         platform = "app ios"
     else:
-        print("OS is Android.")
+        # print("OS is Android.")
         platform = "app android"
 
 
@@ -171,7 +171,7 @@ def getStatusFromiOS():
         for i in range(2, -1, -1):
             fsearch_depdate = fsearch_depdate+str(dates[0][i])+"/"
         fsearch_depdate = fsearch_depdate[:len(fsearch_depdate)-1]
-        print("Dep Date: "+fsearch_depdate)
+        # print("Dep Date: "+fsearch_depdate)
         # fsearch_depdate = dates[0]
         if "ROUNDTRIP" in searchReq[0]:
             isRoundTrip = True
@@ -180,12 +180,12 @@ def getStatusFromiOS():
             for i in range(2, -1, -1):
                 fsearch_arrdate = fsearch_arrdate+str(dates[1][i])+"/"
             fsearch_arrdate = fsearch_arrdate[:len(fsearch_arrdate)-1]
-            print("Arr Date: "+fsearch_arrdate)
+            # print("Arr Date: "+fsearch_arrdate)
         fsearch_infants = str(searchReq[0]).split("noOfInfants\":")[1].split(",\"")[0]
         fsearch_child = str(searchReq[0]).split("noOfChildren\":")[1].split(",\"")[0]
         fsearch_adults = str(searchReq[0]).split("noOfAdults\":")[1].split(",\"")[0]
         fsearch_class = str(searchReq[0]).split("travelClass\":")[1].split("\"")[1].lower()
-        if(str(searchReq[0]).split("domain\":")[1].split("\"")[1]=="INT"):
+        if(str(searchReq[0]).split("domain\":")[1].split("\"")[1].upper()=="INT"):
             isInt = True
 
     #in case of fallback, when HTTP request is sent
@@ -208,17 +208,16 @@ def getStatusFromiOS():
         fsearch_child = str(searchReq[0]).split("noOfChildren=")[1].split("&")[0]
         fsearch_adults = str(searchReq[0]).split("noOfAdults=")[1].split("&")[0]
         fsearch_class = str(searchReq[0]).split("travelClass=")[1].split("&")[0].lower()
-        if(str(searchReq[0]).split("travelClass=")[1].split("&")[0]=="INT"):
+        if(str(searchReq[0]).split("domain=")[1].split("&")[0].upper()=="INT"):
             isInt = True
 
     #Check the payment mode
     payMode = re.findall('paymentOptionParameters = (.+)',fileContents)
-    print("Pay mode: ")
-    print(payMode)
-    # print("")
+    # print("Pay mode: ")
+    # print(payMode)
     if(len(payMode)>0):
         pmCode = str(payMode[0]).split("payop=")[1].split("|")[0]
-    print("##################################### " +pmCode)
+    # print("##################################### " +pmCode)
     quickBook = re.findall('saveQBCard(.+)',fileContents)
     if(len(quickBook)>0):
         if "true" in quickBook[0]:
@@ -226,7 +225,7 @@ def getStatusFromiOS():
         saveQBCard = "yes"
     else:
         saveQBCard = "no"
-    print(saveQBCard)
+    # print(saveQBCard)
 
     if ("mbox = insuranceChecked" in fileContents):
         inscheck = "1"
@@ -274,11 +273,11 @@ def getStatusFromiOS():
     print(" ----------------------------------------------------- ")
     # #Check for promo validation
     if("Invalid promocode" in fileContents):
-        print(" Promo fail ------ 1")
+        # print(" Promo fail ------ 1")
         promofailure = "1"
     if("resMessage = \"Congratulations" in fileContents):
         promosuccess = "1"
-        print(" Promo success ------ 1")
+        # print(" Promo success ------ 1")
 
     # #Check for price Changed
     # priceChanged = re.findall('responseString(.+)\"priceChanged\":true',fileContents)
@@ -361,7 +360,7 @@ def reviewDays():
         return str(daysToDep.days + 1)
 
 def validateValues(key, expected, actual, sheetName): 
-    global login_state_from_PaxPage, login_state_before_PaxPage, pmCode, saveQBCard, promosuccess, promofailure
+    global login_state_from_PaxPage, login_state_before_PaxPage, pmCode, saveQBCard, promosuccess, promofailure, isInt
     #Key:Value pairs which can  be cross-verified from the device logs
     valuesFromLogs = {'adobe.content.platform':platform,'adobe.content.sessionid':sessionId,
 'adobe.link.platform':platform, 'adobe.link.sessionid':sessionId,
@@ -374,29 +373,36 @@ def validateValues(key, expected, actual, sheetName):
 'adobe.review.dep.class':fsearch_class,'adobe.review.dep.date':fsearch_depdate,'adobe.review.ret.date':fsearch_arrdate,
 'adobe.review.flightType':fsearch_flightType, 'adobe.event.promosuccess':promosuccess,
 'adobe.event.promofailure':promofailure, 'adobe.event.inscheck':inscheck, 'adobe.event.insnotcheck':insnotcheck,
-'adobe.review.checkouttype':'logged-in', 'adobe.review.paymethod':pmCode+"|"+saveQBCard, 'adobe.moreflights.vendorname':"b2c"
+'adobe.review.checkouttype':'logged-in', 'adobe.review.paymethod':pmCode+"|"+saveQBCard
 }
     #Keys for which the values cannot be verified from Logs. Here we are assuming that the values are correct.
     valuesNotInLogs = ['adobe.fsearch.dep.resultnumber','adobe.fsearch.ret.resultnumber','adobe.sort.filterterm','adobe.review.duration',
     'adobe.review.dep.time', 'adobe.review.dep.id', 'adobe.review.dep.stops', 'adobe.review.dep.ref', 'adobe.review.dep.difference',
     'adobe.review.dep.searchrank', 'adobe.review.dep.fare', 'adobe.review.ret.class', 'adobe.review.ret.time', 'adobe.review.ret.id',
     'adobe.review.ret.stops', 'adobe.review.ret.ref', 'adobe.review.ret.difference', 'adobe.review.ret.searchrank', 'adobe.review.ret.fare',
-    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number','adobe.sort.sorttype']
+    'adobe.review.flightinc','adobe.review.ret.diffrence','adobe.review.dep.diffrence','adobe.review.promodropdown','adobe.user.email','adobe.user.number','adobe.sort.sorttype', 'adobe.moreflights.vendorname']
 
     key = str(key)
     expected = str(expected)
     actual = str(actual)
     expected = ifNumber(expected)
+    print
+    if(("pagename" in key) and (isInt==True)):
+        # print("<<DOM/INT Case >Key: "+key)
+        expected = expected.replace("dom","int")
+        # print("Expected: "+expected)
+    if(("domestic" in expected) and (isInt==True)):
+        # print("<<DOM/INT Case >Key: "+key)
+        expected = expected.replace("domestic","international")
     if(key in valuesFromLogs.keys()):
         # print ("Expected value for Key: "+key+" needs to be extracted from Device Logs")
         expected = str(valuesFromLogs[key])
     elif(key in valuesNotInLogs):
         # print ("Expected value for Key: "+key+" cannot be extracted from Device Logs. Assuming the passed value to be correct.")
         return (expected, actual, True)
-    elif(("pagename" in key) and (isInt==True)):
-        expected = expected.replace("dom","int")
-    elif(("domestic" in expected) and (isInt==True)):
-        expected = expected.replace("domestic","international")
+    # print(" ******************************************** ")
+    # print("Key: "+key)
+
 
     #Check the promoCode Case
     if(key == "adobe.promo.promocode"):
